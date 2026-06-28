@@ -1,0 +1,10 @@
+# Go build artifacts
+/snippetbox
+*.test
+*.out
+
+# Local environment
+.env
+
+# OS/editor noise
+.DS_Store
