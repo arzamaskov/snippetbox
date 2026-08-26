@@ -7,6 +7,7 @@ help: ## Display available commands
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z0-9_-]+:.*## / {printf "  %-10s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
 run: ## Run the application
+	@echo "Application is available at: http://localhost:4000"
 	go run ./cmd/web
 
 build: ## Build the application binary
