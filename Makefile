@@ -1,30 +1,44 @@
 APP := snippetbox
 BIN := bin/$(APP)
 
-.PHONY: help run build test fmt vet tidy clean
+GO ?= go
+MYSQL ?= mysql
 
-help: ## Display available commands
-	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z0-9_-]+:.*## / {printf "  %-10s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
+DB_NAME ?= $(APP)
+DB_USER ?= admin
+DB_HOST ?= localhost
+DB_PORT ?= 3306
 
-run: ## Run the application
-	@echo "Application is available at: https://localhost:4000"
-	go run ./cmd/web
+.PHONY: help run build test fmt vet tidy clean db check
 
-build: ## Build the application binary
-	mkdir -p bin
-	go build -o $(BIN) ./cmd/web
+.DEFAULT_GOAL := help
 
-test: ## Run tests
-	go test ./...
+help: ## Show available commands
+	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z0-9_-]+:.*## / {printf "  %-12s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
+
+run: ## Run the application (ARGS="...")
+	$(GO) run ./cmd/web $(ARGS)
+
+build: ## Build the application
+	@mkdir -p $(dir $(BIN))
+	$(GO) build -o $(BIN) ./cmd/web
+
+test: ## Run all tests
+	$(GO) test ./...
 
 fmt: ## Format Go code
-	go fmt ./...
+	$(GO) fmt ./...
 
-vet: ## Run Go static analysis
-	go vet ./...
+vet: ## Run static analysis
+	$(GO) vet ./...
 
-tidy: ## Tidy Go module dependencies
-	go mod tidy
+tidy: ## Tidy module dependencies
+	$(GO) mod tidy
+
+check: fmt vet test ## Format, analyze and test
+
+db: ## Connect to MySQL
+	$(MYSQL) -h $(DB_HOST) -P $(DB_PORT) -u $(DB_USER) -p $(DB_NAME)
 
 clean: ## Remove build artifacts
-	rm -rf bin
+	$(RM) -r bin
