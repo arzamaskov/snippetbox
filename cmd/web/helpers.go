@@ -18,6 +18,11 @@ func (app *application) serverError(w http.ResponseWriter, err error) {
 	trace := fmt.Sprintf("%s\n%s", err.Error(), debug.Stack())
 	_ = app.errorLog.Output(errorLogCallDepth, trace)
 
+	if app.debug {
+		http.Error(w, trace, http.StatusInternalServerError)
+		return
+	}
+
 	http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 }
 
