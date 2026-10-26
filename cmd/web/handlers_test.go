@@ -218,3 +218,69 @@ func TestSnippetCreate(t *testing.T) {
 		assert.StringContains(t, body, `<form action='/snippet/create' method='POST'>`)
 	})
 }
+
+func TestLoginDoesNotRedirectToPOSTOnlyPath(t *testing.T) {
+	app := newTestApplication(t)
+	ts := NewTestServer(t, app.routes())
+	defer ts.Close()
+
+	_, _, body := ts.get(t, "/user/login")
+	csrfToken := extractCSRFToken(t, body)
+
+	logoutForm := url.Values{}
+	logoutForm.Add("csrf_token", csrfToken)
+	code, headers, _ := ts.postForm(t, "/user/logout", logoutForm)
+	assert.Equal(t, code, http.StatusSeeOther)
+	assert.Equal(t, headers.Get("Location"), "/user/login")
+
+	_, _, body = ts.get(t, "/user/login")
+	csrfToken = extractCSRFToken(t, body)
+
+	loginForm := url.Values{}
+	loginForm.Add("email", "alice@example.com")
+	loginForm.Add("password", "pa$$word")
+	loginForm.Add("csrf_token", csrfToken)
+	code, headers, _ = ts.postForm(t, "/user/login", loginForm)
+
+	assert.Equal(t, code, http.StatusSeeOther)
+	assert.Equal(t, headers.Get("Location"), "/snippet/create")
+}
+
+func TestAccountViewRequiresAuthenticationAndShowsUser(t *testing.T) {
+	app := newTestApplication(t)
+	ts := NewTestServer(t, app.routes())
+	defer ts.Close()
+
+	code, headers, _ := ts.get(t, "/account/view")
+	assert.Equal(t, code, http.StatusSeeOther)
+	assert.Equal(t, headers.Get("Location"), "/user/login")
+
+	_, _, body := ts.get(t, "/user/login")
+	csrfToken := extractCSRFToken(t, body)
+
+	loginForm := url.Values{}
+	loginForm.Add("email", "alice@example.com")
+	loginForm.Add("password", "pa$$word")
+	loginForm.Add("csrf_token", csrfToken)
+	code, headers, _ = ts.postForm(t, "/user/login", loginForm)
+	assert.Equal(t, code, http.StatusSeeOther)
+	assert.Equal(t, headers.Get("Location"), "/account/view")
+
+	code, _, body = ts.get(t, "/account/view")
+	assert.Equal(t, code, http.StatusOK)
+	assert.StringContains(t, body, "Alice")
+	assert.StringContains(t, body, "alice@example.com")
+
+	csrfToken = extractCSRFToken(t, body)
+	logoutForm := url.Values{}
+	logoutForm.Add("csrf_token", csrfToken)
+	code, _, _ = ts.postForm(t, "/user/logout", logoutForm)
+	assert.Equal(t, code, http.StatusSeeOther)
+
+	_, _, body = ts.get(t, "/user/login")
+	csrfToken = extractCSRFToken(t, body)
+	loginForm.Set("csrf_token", csrfToken)
+	code, headers, _ = ts.postForm(t, "/user/login", loginForm)
+	assert.Equal(t, code, http.StatusSeeOther)
+	assert.Equal(t, headers.Get("Location"), "/snippet/create")
+}
