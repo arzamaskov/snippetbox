@@ -3,6 +3,7 @@ package main
 import (
 	"net/http"
 	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/arzamaskov/snippetbox/internal/assert"
@@ -283,4 +284,57 @@ func TestAccountViewRequiresAuthenticationAndShowsUser(t *testing.T) {
 	code, headers, _ = ts.postForm(t, "/user/login", loginForm)
 	assert.Equal(t, code, http.StatusSeeOther)
 	assert.Equal(t, headers.Get("Location"), "/snippet/create")
+}
+
+func TestAccountPasswordUpdate(t *testing.T) {
+	app := newTestApplication(t)
+	ts := NewTestServer(t, app.routes())
+	defer ts.Close()
+
+	code, headers, _ := ts.get(t, "/account/password/update")
+	assert.Equal(t, code, http.StatusSeeOther)
+	assert.Equal(t, headers.Get("Location"), "/user/login")
+
+	_, _, body := ts.get(t, "/user/login")
+	csrfToken := extractCSRFToken(t, body)
+	loginForm := url.Values{"email": {"alice@example.com"}, "password": {"pa$$word"}, "csrf_token": {csrfToken}}
+	ts.postForm(t, "/user/login", loginForm)
+
+	_, _, body = ts.get(t, "/account/password/update")
+	csrfToken = extractCSRFToken(t, body)
+	assert.StringContains(t, body, "Change Password")
+
+	tests := []struct {
+		name, current, password, confirmation, errorText string
+	}{
+		{"wrong current password", "wrong", "newpassword", "newpassword", "Current password is incorrect"},
+		{"blank new password", "pa$$word", "", "", "This field cannot be blank"},
+		{"short new password", "pa$$word", "short", "short", "at least 8 characters"},
+		{"confirmation mismatch", "pa$$word", "newpassword", "otherpassword", "Passwords do not match"},
+		{"new password too long", "pa$$word", strings.Repeat("a", 73), strings.Repeat("a", 73), "72 bytes long"},
+		{"multibyte password too long", "pa$$word", strings.Repeat("é", 37), strings.Repeat("é", 37), "72 bytes long"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			form := url.Values{"currentPassword": {tt.current}, "newPassword": {tt.password}, "newPasswordConfirmation": {tt.confirmation}, "csrf_token": {csrfToken}}
+			code, _, body := ts.postForm(t, "/account/password/update", form)
+			assert.Equal(t, code, http.StatusUnprocessableEntity)
+			assert.StringContains(t, body, tt.errorText)
+		})
+	}
+
+	csrfToken = "invalid"
+	form := url.Values{"currentPassword": {"pa$$word"}, "newPassword": {"newpassword"}, "newPasswordConfirmation": {"newpassword"}, "csrf_token": {csrfToken}}
+	code, _, _ = ts.postForm(t, "/account/password/update", form)
+	assert.Equal(t, code, http.StatusBadRequest)
+
+	_, _, body = ts.get(t, "/account/password/update")
+	csrfToken = extractCSRFToken(t, body)
+	form.Set("csrf_token", csrfToken)
+	code, headers, _ = ts.postForm(t, "/account/password/update", form)
+	assert.Equal(t, code, http.StatusSeeOther)
+	assert.Equal(t, headers.Get("Location"), "/account/view")
+	code, _, body = ts.get(t, "/account/view")
+	assert.Equal(t, code, http.StatusOK)
+	assert.StringContains(t, body, "Your password has been changed successfully")
 }

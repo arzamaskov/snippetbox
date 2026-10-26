@@ -40,3 +40,30 @@ func TestUserModelExists(t *testing.T) {
 		})
 	}
 }
+
+func TestUserModelPasswordUpdate(t *testing.T) {
+	if testing.Short() {
+		t.Skip("models: skipping integration test")
+	}
+
+	db := newTestDB(t)
+	m := UserModel{DB: db}
+	assert.NilError(t, m.Insert("Bob", "bob@example.com", "currentpassword"))
+	var id int
+	assert.NilError(t, db.QueryRow("SELECT id FROM users WHERE email = ?", "bob@example.com").Scan(&id))
+
+	err := m.PasswordUpdate(id, "wrong-password", "newpassword")
+	assert.Equal(t, err, ErrInvalidCredentials)
+	_, err = m.Authenticate("bob@example.com", "currentpassword")
+	assert.NilError(t, err)
+
+	err = m.PasswordUpdate(id, "currentpassword", "newpassword")
+	assert.NilError(t, err)
+	_, err = m.Authenticate("bob@example.com", "currentpassword")
+	assert.Equal(t, err, ErrInvalidCredentials)
+	_, err = m.Authenticate("bob@example.com", "newpassword")
+	assert.NilError(t, err)
+
+	err = m.PasswordUpdate(id+100, "whatever", "anotherpassword")
+	assert.Equal(t, err, ErrNoRecord)
+}
